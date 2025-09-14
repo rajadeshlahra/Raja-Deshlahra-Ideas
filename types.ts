@@ -7,3 +7,9 @@ export interface FeedLog {
   burp?: boolean;
   vomit?: boolean;
 }
+
+export interface UserProfile {
+  motherName: string;
+  childName: string;
+  childAge: string;
+}

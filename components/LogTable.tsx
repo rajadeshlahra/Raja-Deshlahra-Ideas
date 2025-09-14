@@ -1,11 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import type { FeedLog } from '../types';
+import type { FeedLog, UserProfile } from '../types';
 import TimerDisplay from './TimerDisplay';
 import { HourglassIcon, BurpIcon, VomitIcon, ChevronLeftIcon, ChevronRightIcon, MilkDropIcon, BabyBottleIcon } from './Icons';
+
+interface ReportModalProps {
+  reportContent: string;
+  onClose: () => void;
+}
+
+const ReportModal: React.FC<ReportModalProps> = ({ reportContent, onClose }) => {
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(reportContent).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('Failed to copy report.');
+        });
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-5 w-full max-w-md shadow-xl animate-fade-in">
+                <h3 className="text-xl font-bold mb-2 text-text-main">Doctor's Report</h3>
+                <textarea
+                    readOnly
+                    value={reportContent}
+                    className="w-full h-64 p-3 border rounded bg-gray-50 font-mono text-sm whitespace-pre-wrap resize-none focus:outline-none"
+                />
+                <div className="flex gap-2 mt-4">
+                    <button
+                        onClick={handleCopy}
+                        className="w-full bg-soft-green text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-600 transition-colors"
+                    >
+                        {isCopied ? 'Copied!' : 'Copy to Clipboard'}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="w-full bg-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 interface LogTableProps {
   logs: FeedLog[];
   onClear: () => void;
+  userProfile: UserProfile | null;
 }
 
 const formatTime12Hour = (dateString: string) => {
@@ -16,7 +63,6 @@ const formatTime12Hour = (dateString: string) => {
 const groupLogsByDate = (logs: FeedLog[]) => {
   return logs.reduce((acc, log) => {
     const date = new Date(log.startTime);
-    // Use a consistent YYYY-MM-DD key for reliable sorting
     const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const displayDate = date.toLocaleDateString([], {
       weekday: 'long',
@@ -35,7 +81,7 @@ const groupLogsByDate = (logs: FeedLog[]) => {
   }, {} as Record<string, { displayDate: string; logs: FeedLog[] }>);
 };
 
-const LogTable: React.FC<LogTableProps> = ({ logs, onClear }) => {
+const LogTable: React.FC<LogTableProps> = ({ logs, onClear, userProfile }) => {
   const [currentDateIndex, setCurrentDateIndex] = useState<number>(0);
   const [showReport, setShowReport] = useState<boolean>(false);
   const [reportContent, setReportContent] = useState<string>('');
@@ -47,12 +93,10 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onClear }) => {
     setCurrentDateIndex(0);
   }, [logs.length]);
 
-  // Goes to an OLDER date (e.g., yesterday) -> index increases
   const handlePrevDay = () => {
     setCurrentDateIndex(prev => Math.min(prev + 1, dateKeys.length - 1));
   };
 
-  // Goes to a NEWER date (e.g., today) -> index decreases
   const handleNextDay = () => {
     setCurrentDateIndex(prev => Math.max(prev - 1, 0));
   };
@@ -68,8 +112,6 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onClear }) => {
     let breastFeedCount = 0;
     let formulaFeedCount = 0;
 
-    // Iterate through all logs (not just the current day)
-    // FIX: Correctly sort logs by start time and fix typos.
     const sortedLogs = [...logs].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     
     for (let i = 1; i < sortedLogs.length; i++) {
@@ -95,63 +137,35 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onClear }) => {
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         return `${hours}h ${minutes}m`;
     };
-
-    const report = `
-Feeding Report Summary
+    
+    const reportHeader = `
+Feeding Report for: ${userProfile?.childName || 'Child'}
+Mother: ${userProfile?.motherName || 'N/A'}
+Age: ${userProfile?.childAge || 'N/A'} months
 --------------------------
-Total Sessions Logged: ${logs.length}
+    `.trim().replace(/^ +/gm, '');
 
-Feed Type Summary:
+    const reportBody = `
+Summary
+- Total Sessions: ${logs.length}
 - Breast Milk Feeds: ${breastFeedCount}
 - Formula Feeds: ${formulaFeedCount}
 
-Analytics:
+Analytics
 - Average Gap Between Feeds: ${formatDuration(avgGapSeconds)}
 - Total Vomits: ${vomitCount} time(s)
 - Sessions without Burp: ${missedBurpCount} time(s)
 
-${missedBurpCount > 0 ? `\nNote: Baby did not burp after ${missedBurpCount} feeding session(s).` : ''}
+${missedBurpCount > 0 ? `Note: Baby did not burp after ${missedBurpCount} feeding session(s).` : ''}
     `.trim().replace(/^ +/gm, '');
 
-    setReportContent(report);
+    setReportContent(`${reportHeader}\n\n${reportBody}`);
     setShowReport(true);
   };
-  
-  const ReportModal = () => {
-    const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-      if(textAreaRef.current) {
-        textAreaRef.current.select();
-      }
-    }, [])
-    
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-5 w-full max-w-md shadow-xl animate-fade-in">
-                <h3 className="text-xl font-bold mb-4 text-text-main">Doctor's Report</h3>
-                <p className="text-sm text-text-muted mb-3">The text below is selected. You can easily copy and paste it into a message or email.</p>
-                <textarea
-                    ref={textAreaRef}
-                    readOnly
-                    className="w-full h-64 p-3 border rounded bg-gray-50 font-mono text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                    value={reportContent}
-                />
-                <button
-                    onClick={() => setShowReport(false)}
-                    className="mt-4 w-full bg-soft-blue text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-500 transition-colors"
-                >
-                    Close
-                </button>
-            </div>
-        </div>
-    );
-  };
-
 
   return (
     <div className="w-full">
-      {showReport && <ReportModal />}
+      {showReport && <ReportModal reportContent={reportContent} onClose={() => setShowReport(false)} />}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-xl font-bold text-text-main">Feeding History</h3>
         <div className="flex items-center gap-2">
