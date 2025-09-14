@@ -1,0 +1,5 @@
+{
+  "name": "Newborn Feeding Tracker",
+  "description": "A simple and elegant application to track feeding and non-feeding times for a newborn baby. Start and stop sessions with a simple slide toggle and view a log of all feeding events.",
+  "requestFramePermissions": []
+}
